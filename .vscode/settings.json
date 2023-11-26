@@ -1,0 +1,5 @@
+{
+    "arduino.additionalUrls": [
+        "https://raw.githubusercontent.com/vroland/epdiy/main/library.json"
+    ]
+}

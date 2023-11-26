@@ -1,0 +1,22 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Mac",
+            "compilerPath": "/usr/bin/clang",
+            "compilerArgs": [],
+            "intelliSenseMode": "macos-clang-arm64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${HOME}/Documents/Arduino/libraries/**",
+                "${HOME}/Library/Arduino15/packages/**"
+            ],
+            "forcedInclude": [],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "defines": [
+                "CONFIG_IDF_TARGET_ESP32S3=1"
+            ]
+        }
+    ]
+}
