@@ -31,7 +31,10 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
   DBG_OUTPUT_PORT.printf("Sleep time: %u", sleepTime);
 
   // Repeat as long as the stream continues
-  while (true) {
+  while (true)) {
+    // Set one second timeout as long as we recieve the metadata
+    stream->setTimeout(1000);
+
     uint16_t x;
     response_length = stream->readBytes((uint8_t *)&x, 2);
     if (response_length == 0) {
@@ -82,14 +85,14 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
 
     uint8_t *pixel = (uint8_t *)ps_malloc(size);
     Rect_t area = {
-        .x = x,
-        .y = y,
-        .width = width,
-        .height = height,
+      .x = x,
+      .y = y,
+      .width = width,
+      .height = height,
     };
 
     // Take all the time we need to read the final data stream
-    stream->setTimeout(10000);
+    stream->setTimeout(30 * 1000);
     response_length = stream->readBytes(pixel, size);
     if (response_length < size) {
       write_error("Stream ended unexpectedly while reading image data");

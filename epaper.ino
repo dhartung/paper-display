@@ -32,6 +32,7 @@ const int vref = 1100;
 // deep sleep.
 RTC_DATA_ATTR uint32_t image_id = 0;
 RTC_DATA_ATTR uint32_t wakeup_count = 0;
+RTC_DATA_ATTR uint32_t error_count = 0;
 
 float current_voltage;
 
@@ -91,15 +92,12 @@ net_state_t send_request(uint32_t *imageId, uint32_t *sleepTime) {
 
 void setup() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-  bool is_wakeup_from_deepsleep = (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER ||
-                                   wakeup_reason == ESP_SLEEP_WAKEUP_ULP ||
-                                   wakeup_reason == ESP_SLEEP_WAKEUP_EXT0);
-
+  bool is_wakeup_from_deepsleep = (wakeup_count > 0);
   if (!is_wakeup_from_deepsleep) {
     Serial.begin(115200);
-  } else {
-    wakeup_count++;
   }
+
+  wakeup_count++;
 
   epd_init();
   current_voltage = read_battery();
@@ -112,6 +110,7 @@ void setup() {
   }
 
   write_text("Starting system");
+  write_text("Voltage: " + String(current_voltage) + "V");
   write_text("Connecting to wifi");
   write_text("Wifi SSID: " + String(wifi_ssid), 60);
 
@@ -125,14 +124,35 @@ void setup() {
     write_text("Start application loop");
 
     if (send_request(&image_id, &sleep_time_in_s) != SUCCSESS) {
-      sleep_time_in_s = 2 * 60 * 60;
+      image_id = 0;
+      switch (error_count) {
+        case 0:
+          sleep_time_in_s = 30;
+          break;
+
+        case 1:
+          sleep_time_in_s = 5 * 60;
+          break;
+
+        case 3:
+          sleep_time_in_s = 1 * 60 * 60;
+          break;
+
+        default:
+          sleep_time_in_s = 12 * 60 * 60;
+          break;
+      }
+      
+      error_count++;
+    } else {
+      error_count = 0;
     }
-    stop_wifi();
   } else {
     write_error("Could not connect to wifi network, check credentials!");
     sleep_time_in_s = 2 * 60 * 60;
   }
 
+  stop_wifi();
   Serial.end();
   esp_sleep_enable_timer_wakeup(sleep_time_in_s * 1000 * 1000);
   epd_poweroff_all();
