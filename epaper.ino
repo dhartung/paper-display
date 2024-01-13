@@ -90,6 +90,30 @@ net_state_t send_request(uint32_t *imageId, uint32_t *sleepTime) {
   }
 }
 
+uint32_t get_sleep_time_for_error() {
+  uint32_t sleep_time_in_s;
+  switch (error_count) {
+    case 0:
+      sleep_time_in_s = 30;
+      break;
+
+    case 1:
+      sleep_time_in_s = 5 * 60;
+      break;
+
+    case 3:
+      sleep_time_in_s = 1 * 60 * 60;
+      break;
+
+    default:
+      sleep_time_in_s = 12 * 60 * 60;
+      break;
+  }
+
+  error_count++;
+  return sleep_time_in_s;
+}
+
 void setup() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   bool is_wakeup_from_deepsleep = (wakeup_count > 0);
@@ -114,7 +138,7 @@ void setup() {
   write_text("Connecting to wifi");
   write_text("Wifi SSID: " + String(wifi_ssid), 60);
 
-  uint32_t sleep_time_in_s;
+  uint32_t sleep_time_in_s = 0;
 
   wl_status_t status = start_wifi(wifi_ssid, wifi_password);
   write_text("Connection status: " + String(status), 60);
@@ -123,33 +147,17 @@ void setup() {
     write_text("Assigned IP: " + WiFi.localIP().toString(), 60);
     write_text("Start application loop");
 
-    if (send_request(&image_id, &sleep_time_in_s) != SUCCSESS) {
-      image_id = 0;
-      switch (error_count) {
-        case 0:
-          sleep_time_in_s = 30;
-          break;
-
-        case 1:
-          sleep_time_in_s = 5 * 60;
-          break;
-
-        case 3:
-          sleep_time_in_s = 1 * 60 * 60;
-          break;
-
-        default:
-          sleep_time_in_s = 12 * 60 * 60;
-          break;
-      }
-      
-      error_count++;
-    } else {
+    if (send_request(&image_id, &sleep_time_in_s) == SUCCSESS) {
       error_count = 0;
     }
   } else {
     write_error("Could not connect to wifi network, check credentials!");
-    sleep_time_in_s = 2 * 60 * 60;
+  }
+
+  // If an error occurs we cannot recieve the sleep time from the server and
+  // must set it to sensible defaults.
+  if (sleep_time_in_s <= 0) {
+    sleep_time_in_s = get_sleep_time_for_error();
   }
 
   stop_wifi();

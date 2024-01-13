@@ -9,9 +9,10 @@ typedef enum {
   SUCCSESS = 0,
   UNEXPECTED_STATUS_CODE = 1,
   UNKOWN_VERSION = 2,
-  UNEXPECTED_END_OF_STREAM = 3,
-  WIDTH_TOO_HIGH = 4,
-  HEIGHT_TOO_HIGH = 5
+  INVALID_SLEEP_TIME = 3,
+  UNEXPECTED_END_OF_STREAM = 4,
+  WIDTH_TOO_HIGH = 5,
+  HEIGHT_TOO_HIGH = 6
 } net_state_t;
 
 net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
@@ -20,18 +21,25 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
 
   response_length = stream->readBytes((uint8_t *)imageId, 4);
   if (response_length < 4) {
+    write_error("Stream ended unexpectedly while reading imageId");
     return UNEXPECTED_END_OF_STREAM;
   }
   DBG_OUTPUT_PORT.printf("Image id: %u", imageId);
 
   response_length = stream->readBytes((uint8_t *)sleepTime, 4);
   if (response_length < 4) {
+    write_error("Stream ended unexpectedly while reading sleepTime");
     return UNEXPECTED_END_OF_STREAM;
   }
   DBG_OUTPUT_PORT.printf("Sleep time: %u", sleepTime);
 
+  if (&sleepTime <= 0) {
+    write_error("Recieved sleep time with value 0");
+    return INVALID_SLEEP_TIME;
+  }
+
   // Repeat as long as the stream continues
-  while (true)) {
+  while (true) {
     // Set one second timeout as long as we recieve the metadata
     stream->setTimeout(1000);
 
@@ -85,10 +93,10 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
 
     uint8_t *pixel = (uint8_t *)ps_malloc(size);
     Rect_t area = {
-      .x = x,
-      .y = y,
-      .width = width,
-      .height = height,
+        .x = x,
+        .y = y,
+        .width = width,
+        .height = height,
     };
 
     // Take all the time we need to read the final data stream
@@ -114,6 +122,7 @@ net_state_t process_stream(Stream *stream, uint32_t *imageId,
 
   response_length = stream->readBytes(&version, 1);
   if (response_length < 1) {
+    write_error("Stream ended unexpectedly while reading schema version");
     return UNEXPECTED_END_OF_STREAM;
   }
   DBG_OUTPUT_PORT.printf("Schema Version: %u", version);
