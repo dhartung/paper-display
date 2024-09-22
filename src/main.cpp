@@ -21,6 +21,7 @@
 #include "pins.h"
 #include "response_parser.h"
 #include "screen_io.h"
+#include "utils.h"
 
 #define FILE_SYSTEM FFat
 
@@ -35,6 +36,7 @@ RTC_DATA_ATTR uint32_t wakeup_count = 0;
 RTC_DATA_ATTR uint32_t error_count = 0;
 
 float current_voltage;
+String device_id;  // derived from mac adress
 
 wl_status_t start_wifi(const char *ssid, const char *password) {
   DBG_OUTPUT_PORT.println("\r\nConnecting to: " + String(ssid));
@@ -71,9 +73,13 @@ net_state_t send_request(uint32_t *imageId, uint32_t *sleepTime) {
   client.stop();  // close connection before sending a new request
   HTTPClient http;
   client.setInsecure();
-  http.begin(client, String(server_url) + "?version=" + String(*imageId) +
-                         "&voltage=" + String(current_voltage) + "&wakeups=" +
-                         String(wakeup_count) + "&key=" + String(device_key));
+  http.begin(client, String(server_url));
+  http.addHeader("Image-Id", String(*imageId));
+  http.addHeader("Voltage", String(current_voltage));
+  http.addHeader("Wakeup-Count", String(wakeup_count));
+  http.addHeader("Authorization", String(device_key));
+  http.addHeader("Device-Id", String(device_id));
+  http.addHeader("Wifi-Signal", String(WiFi.RSSI()));
   int httpCode = http.GET();
 
   if (httpCode == 200) {
@@ -85,7 +91,8 @@ net_state_t send_request(uint32_t *imageId, uint32_t *sleepTime) {
     epd_poweroff();
     return response;
   } else {
-    write_error("Got unexpected status code " + String(httpCode));
+    write_error("Got unexpected status code " + String(httpCode) + " on " +
+                http.getString());
     return UNEXPECTED_STATUS_CODE;
   }
 }
@@ -133,8 +140,15 @@ void setup() {
     print_on_display = true;
   }
 
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  device_id = get_hex(mac[3]) + get_hex(mac[4]) + get_hex(mac[5]);
+  write_header(device_id);
+
   write_text("Starting system");
   write_text("Voltage: " + String(current_voltage) + "V");
+
+  write_text("Device id: " + device_id);
   write_text("Connecting to wifi");
   write_text("Wifi SSID: " + String(wifi_ssid), 60);
 
@@ -157,6 +171,7 @@ void setup() {
   // If an error occurs we cannot recieve the sleep time from the server and
   // must set it to sensible defaults.
   if (sleep_time_in_s <= 0) {
+    image_id = 0;
     sleep_time_in_s = get_sleep_time_for_error();
   }
 

@@ -5,7 +5,7 @@
 #include "opensans16.h"
 
 int cursor_x = 200;
-int cursor_y = 150;
+int cursor_y = 100;
 
 bool print_on_display = false;
 
@@ -54,4 +54,12 @@ void write_error(String string, bool clearArea) {
 
 void write_error(String string) {
     write_error(string, true);
+}
+
+void write_header(String string) {
+  if (print_on_display) {
+    int x = EPD_WIDTH - 150;
+    int y = 50;
+    writeln((GFXfont *)&OpenSans16, (char *)string.c_str(), &x, &y, NULL);
+  }
 }

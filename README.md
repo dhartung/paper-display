@@ -11,13 +11,12 @@ either send a partial image or no image at all. The schema for the server respon
 
 To get this code running, you first need to create a configuration file. Please rename copy the file `epaper_config.example.h` into `epaper_config.h` and fill in the required values.
 
-To begin using this project, please follow the instructions provided on the board's [Github
-Page](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47). Ensure that you enable PSRAM and select ESP32S3 Dev Module as your board type.
+This project uses [platform.io](https://platformio.org/). Download the Tool for your platform or IDE of choice. Then you can run:
+```bash
+pio run build
+```
+To build and upload the code to your device of choice.
 
-For optimal development, I recommend using Visual Studio Code (VSCode) with the Arduino extension. Some configurations are included in this
-project (located within the `.vscode` folder). You may need to create a `c_cpp_properties.json` file that includes the libraries provided by
-Arduino. These libraries can be found under `/Users/<user>/Documents/Arduino/libraries/**` and `/Users/<user>/Library/Arduino15/packages/**`
-in macOS. You can easily configure these settings using VSCode's quickfix options.
 
 ## Troubleshooting
 

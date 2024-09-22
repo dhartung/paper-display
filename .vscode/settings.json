@@ -1,5 +1,6 @@
 {
-    "arduino.additionalUrls": [
-        "https://raw.githubusercontent.com/vroland/epdiy/main/library.json"
-    ]
+    "files.associations": {
+        "functional": "c",
+        "wstring.h": "c"
+    }
 }
