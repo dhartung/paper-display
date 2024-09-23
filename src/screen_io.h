@@ -4,10 +4,18 @@
 #include "epd_driver.h"
 #include "opensans16.h"
 
-int cursor_x = 200;
-int cursor_y = 100;
+#define INITIAL_TEXT_CURSOR_X 200
+#define INITIAL_TEXT_CURSOR_Y 100
+
+int cursor_x = INITIAL_TEXT_CURSOR_X;
+int cursor_y = INITIAL_TEXT_CURSOR_Y;
 
 bool print_on_display = false;
+
+void reset_text_cursor() {
+    cursor_x = INITIAL_TEXT_CURSOR_X;
+    cursor_y = INITIAL_TEXT_CURSOR_Y;
+}
 
 void write_text(String string, int offset) {
     if (print_on_display) {

@@ -24,14 +24,14 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
     write_error("Stream ended unexpectedly while reading imageId");
     return UNEXPECTED_END_OF_STREAM;
   }
-  DBG_OUTPUT_PORT.printf("Image id: %u", imageId);
+  DBG_OUTPUT_PORT.printf("Image id: %u\n", imageId);
 
   response_length = stream->readBytes((uint8_t *)sleepTime, 4);
   if (response_length < 4) {
     write_error("Stream ended unexpectedly while reading sleepTime");
     return UNEXPECTED_END_OF_STREAM;
   }
-  DBG_OUTPUT_PORT.printf("Sleep time: %u", sleepTime);
+  DBG_OUTPUT_PORT.printf("Sleep time: %u\n", sleepTime);
 
   if (&sleepTime <= 0) {
     write_error("Recieved sleep time with value 0");
@@ -52,7 +52,7 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
       write_error("Stream ended unexpectedly while reading x");
       return UNEXPECTED_END_OF_STREAM;
     }
-    DBG_OUTPUT_PORT.printf("x: %u", x);
+    DBG_OUTPUT_PORT.printf("x: %u\n", x);
 
     uint16_t y;
     stream->readBytes((uint8_t *)&y, 2);
@@ -60,7 +60,7 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
       write_error("Stream ended unexpectedly while reading y");
       return UNEXPECTED_END_OF_STREAM;
     }
-    DBG_OUTPUT_PORT.printf("y: %u", y);
+    DBG_OUTPUT_PORT.printf("y: %u\n", y);
 
     uint16_t width;
     response_length = stream->readBytes((uint8_t *)&width, 2);
@@ -68,7 +68,7 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
       write_error("Stream ended unexpectedly while reading width");
       return UNEXPECTED_END_OF_STREAM;
     }
-    DBG_OUTPUT_PORT.printf("width: %u", width);
+    DBG_OUTPUT_PORT.printf("width: %u\n", width);
     if (width > EPD_WIDTH) {
       write_error("Image returned from server is to wide: " + String(width));
       return WIDTH_TOO_HIGH;
@@ -80,7 +80,7 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
       write_error("Stream ended unexpectedly while reading height");
       return UNEXPECTED_END_OF_STREAM;
     }
-    DBG_OUTPUT_PORT.printf("height: %u", height);
+    DBG_OUTPUT_PORT.printf("height: %u\n", height);
     if (height > EPD_HEIGHT) {
       write_error("Image returned from server is to tall: " + String(height));
       return HEIGHT_TOO_HIGH;
@@ -104,6 +104,7 @@ net_state_t process_stream_V1(Stream *stream, uint32_t *imageId,
     response_length = stream->readBytes(pixel, size);
     if (response_length < size) {
       write_error("Stream ended unexpectedly while reading image data");
+      free(pixel);
       return UNEXPECTED_END_OF_STREAM;
     }
 

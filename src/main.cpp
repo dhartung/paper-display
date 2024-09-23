@@ -7,12 +7,12 @@
 #include <FFat.h>
 #include <FS.h>
 #include <HTTPClient.h>
-#include <SD.h>
 #include <SPI.h>
-#include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
 
 #include "epaper_config.h"
 #include "epd_driver.h"
@@ -21,11 +21,15 @@
 #include "pins.h"
 #include "response_parser.h"
 #include "screen_io.h"
-#include "utils.h"
+#include "status_code_counter.hpp"
+#include "network.hpp"
 
 #define FILE_SYSTEM FFat
-
 #define DBG_OUTPUT_PORT Serial
+#define STATUS_CODE_HISTORY 5
+
+extern const uint8_t rootca_crt_bundle_start[] asm(
+    "_binary_data_cert_x509_crt_bundle_bin_start");
 
 const int vref = 1100;
 
@@ -34,31 +38,12 @@ const int vref = 1100;
 RTC_DATA_ATTR uint32_t image_id = 0;
 RTC_DATA_ATTR uint32_t wakeup_count = 0;
 RTC_DATA_ATTR uint32_t error_count = 0;
+RTC_DATA_ATTR int _status_codes[STATUS_CODE_HISTORY] = {0, 0, 0, 0, 0};
+StatusCodeCounter status_codes(_status_codes, STATUS_CODE_HISTORY);
 
 float current_voltage;
 String device_id;  // derived from mac adress
-
-wl_status_t start_wifi(const char *ssid, const char *password) {
-  DBG_OUTPUT_PORT.println("\r\nConnecting to: " + String(ssid));
-  IPAddress dns(8, 8, 8, 8);  // Use Google DNS
-  WiFi.disconnect();
-  WiFi.mode(WIFI_STA);  // switch off AP
-  WiFi.setAutoConnect(true);
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(ssid, password);
-  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    write_text("STA failed, retrying", 60);
-    WiFi.disconnect(false);
-    delay(500);
-    WiFi.begin(ssid, password);
-  }
-  return WiFi.status();
-}
-
-void stop_wifi() {
-  WiFi.disconnect();
-  WiFi.mode(WIFI_OFF);
-}
+String device_token = "";
 
 float read_battery() {
   // When reading the battery voltage, POWER_EN must be turned on
@@ -68,31 +53,62 @@ float read_battery() {
   return ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
 }
 
-net_state_t send_request(uint32_t *imageId, uint32_t *sleepTime) {
-  WiFiClientSecure client;
-  client.stop();  // close connection before sending a new request
-  HTTPClient http;
-  client.setInsecure();
-  http.begin(client, String(server_url));
-  http.addHeader("Image-Id", String(*imageId));
-  http.addHeader("Voltage", String(current_voltage));
-  http.addHeader("Wakeup-Count", String(wakeup_count));
-  http.addHeader("Authorization", String(device_key));
-  http.addHeader("Device-Id", String(device_id));
-  http.addHeader("Wifi-Signal", String(WiFi.RSSI()));
-  int httpCode = http.GET();
+net_state_t request_device_image(uint32_t *imageId, uint32_t *sleepTime) {
+  NetworkClient client;
+  client.addImageIdHeader(image_id);
+  client.addVoltageHeader(current_voltage);
+  client.addWakeupCountHeader(wakeup_count);
+  client.addAuthorizationHeader(device_token);
+
+  int httpCode = client.GET(server_url);
+
+  // Track status codes of recent requests to trigger actions on certain repeated codes
+  status_codes.add(httpCode);
 
   if (httpCode == 200) {
     epd_poweron();
-    auto responseStream = http.getStreamPtr();
-    write_text("Got response with content length: " + String(http.getSize()));
+    auto responseStream = client.getStreamPtr();
+    write_text("Got response with content length: " + String(client.getSize()));
 
     net_state_t response = process_stream(responseStream, imageId, sleepTime);
     epd_poweroff();
     return response;
   } else {
-    write_error("Got unexpected status code " + String(httpCode) + " on " +
-                http.getString());
+    write_error("Status code " + String(httpCode) + ": " + client.getString());
+    return UNEXPECTED_STATUS_CODE;
+  }
+}
+
+net_state_t request_device_token(Preferences preferences) {
+  print_on_display = true;
+  epd_clear();
+  reset_text_cursor();
+  write_text("Request device token");
+
+  NetworkClient client;
+  client.addVoltageHeader(current_voltage);
+  client.addWakeupCountHeader(wakeup_count);
+  client.addAuthorizationHeader(device_token);
+
+  int httpCode = client.GET(String(server_url) + "/token");
+
+  if (httpCode == 200) {
+    JsonDocument doc;
+    write_text("Recieved successful response from server");
+    client.getJson(doc);
+
+    cursor_y += 20;
+    write_text("Device: " + String((const char*)doc["deviceId"]));
+    write_text("Challenge: " + String((const char*)doc["challenge"]));
+    cursor_y += 20;
+
+    write_text("Please approve this token on the server.");
+
+    device_token = String((const char*)doc["token"]);
+    preferences.putString("token", device_token);
+    return SUCCSESS;
+  } else {
+    write_error("Status code " + String(httpCode) + ": " + client.getString());
     return UNEXPECTED_STATUS_CODE;
   }
 }
@@ -105,11 +121,11 @@ uint32_t get_sleep_time_for_error() {
       break;
 
     case 1:
-      sleep_time_in_s = 5 * 60;
+      sleep_time_in_s = 30;
       break;
 
-    case 3:
-      sleep_time_in_s = 1 * 60 * 60;
+    case 2:
+      sleep_time_in_s = 30; // 1 * 60 * 60;
       break;
 
     default:
@@ -140,30 +156,45 @@ void setup() {
     print_on_display = true;
   }
 
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  device_id = get_hex(mac[3]) + get_hex(mac[4]) + get_hex(mac[5]);
+  device_id = NetworkClient::getDeviceIdFromMac();
   write_header(device_id);
 
   write_text("Starting system");
   write_text("Voltage: " + String(current_voltage) + "V");
-
-  write_text("Device id: " + device_id);
   write_text("Connecting to wifi");
   write_text("Wifi SSID: " + String(wifi_ssid), 60);
 
   uint32_t sleep_time_in_s = 0;
 
-  wl_status_t status = start_wifi(wifi_ssid, wifi_password);
+  wl_status_t status = NetworkClient::startWifi(wifi_ssid, wifi_password);
   write_text("Connection status: " + String(status), 60);
   if (status == WL_CONNECTED) {
     write_text("Wifi signal strength: " + String(WiFi.RSSI()) + "dbm", 60);
     write_text("Assigned IP: " + WiFi.localIP().toString(), 60);
-    write_text("Start application loop");
 
-    if (send_request(&image_id, &sleep_time_in_s) == SUCCSESS) {
-      error_count = 0;
+    Preferences preferences;
+    preferences.begin("epaper", false);
+    device_token = preferences.getString("token", device_token);
+
+    if (device_token.equals("")) {
+      request_device_token(preferences);
+      write_text("Device will go to sleep, restart manually");
+      sleep_time_in_s = 30 * 60;
+    } else {
+      if (request_device_image(&image_id, &sleep_time_in_s) == SUCCSESS) {
+        error_count = 0;
+      } else {
+        // If the last three occurences of status codes are 401, our token seems to be 
+        // invalidated. Reset the stored token. 
+        if (status_codes.last_n_have_status(3, 401)) {
+          request_device_token(preferences);
+          write_text("Device will go to sleep, restart manually");
+          sleep_time_in_s = 30 * 60;
+        }
+      }
     }
+
+    preferences.end();
   } else {
     write_error("Could not connect to wifi network, check credentials!");
   }
@@ -175,7 +206,7 @@ void setup() {
     sleep_time_in_s = get_sleep_time_for_error();
   }
 
-  stop_wifi();
+  NetworkClient::stopWifi();
   Serial.end();
   esp_sleep_enable_timer_wakeup(sleep_time_in_s * 1000 * 1000);
   epd_poweroff_all();
