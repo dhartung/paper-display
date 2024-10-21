@@ -4,15 +4,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <ESPmDNS.h>
-#include <FFat.h>
-#include <FS.h>
-#include <HTTPClient.h>
 #include <Preferences.h>
-#include <SPI.h>
-#include <WiFi.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
 
 #include "epaper_config.h"
 #include "epd_driver.h"
@@ -99,7 +91,7 @@ net_state_t request_device_token(Preferences preferences) {
   client.addWakeupCountHeader(wakeup_count);
   client.addAuthorizationHeader(device_token);
 
-  int httpCode = client.GET(server_url + "/token");
+  int httpCode = client.GET(String(server_url) + "/token");
 
   if (httpCode == 200) {
     JsonDocument doc;
