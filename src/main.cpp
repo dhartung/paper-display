@@ -99,9 +99,7 @@ net_state_t request_device_token(Preferences preferences) {
   client.addWakeupCountHeader(wakeup_count);
   client.addAuthorizationHeader(device_token);
 
-  auto url = String(server_url);
-  url.replace("/image", "/token");
-  int httpCode = client.GET(url);
+  int httpCode = client.GET(server_url + "/token");
 
   if (httpCode == 200) {
     JsonDocument doc;
