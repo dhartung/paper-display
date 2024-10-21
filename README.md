@@ -17,6 +17,14 @@ pio run build
 ```
 To build and upload the code to your device of choice.
 
+## SSL certificates
+
+The device does not have any root certificates installed. Therefore, it is not able to verify a server's certificate.
+You can generate a certificate bundle using the following script:
+```bash
+python3 tools/gen_crt_bundle.py
+```
+The generated file will be added automatically to your device during the next upload.
 
 ## Troubleshooting
 

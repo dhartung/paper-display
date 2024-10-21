@@ -3,3 +3,4 @@ epaper_config.h
 data/cert
 .pio
 .idea
+.DS_Store
