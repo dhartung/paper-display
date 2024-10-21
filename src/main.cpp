@@ -3,26 +3,26 @@
 #endif
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <ESPmDNS.h>
 #include <FFat.h>
 #include <FS.h>
 #include <HTTPClient.h>
+#include <Preferences.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
-#include <ArduinoJson.h>
-#include <Preferences.h>
 
 #include "epaper_config.h"
 #include "epd_driver.h"
 #include "esp_adc_cal.h"
+#include "network.hpp"
 #include "opensans16.h"
 #include "pins.h"
 #include "response_parser.h"
 #include "screen_io.h"
 #include "status_code_counter.hpp"
-#include "network.hpp"
 
 #define FILE_SYSTEM FFat
 #define DBG_OUTPUT_PORT Serial
@@ -56,25 +56,34 @@ float read_battery() {
 net_state_t request_device_image(uint32_t *imageId, uint32_t *sleepTime) {
   NetworkClient client;
   client.addImageIdHeader(image_id);
+  client.addAcceptVersionHeader(SUPPORTED_VERSIONS);
   client.addVoltageHeader(current_voltage);
   client.addWakeupCountHeader(wakeup_count);
   client.addAuthorizationHeader(device_token);
 
   int httpCode = client.GET(server_url);
 
-  // Track status codes of recent requests to trigger actions on certain repeated codes
+  // Track status codes of recent requests to trigger actions on certain
+  // repeated codes
   status_codes.add(httpCode);
 
   if (httpCode == 200) {
     epd_poweron();
     auto responseStream = client.getStreamPtr();
-    write_text("Got response with content length: " + String(client.getSize()));
+    size_t response_length = client.getSize();
+    write_text("Got response with content length: " + String(response_length));
 
-    net_state_t response = process_stream(responseStream, imageId, sleepTime);
+    HttpStream stream(responseStream, response_length);
+    net_state_t response = process_stream(&stream, imageId, sleepTime);
     epd_poweroff();
     return response;
   } else {
-    write_error("Status code " + String(httpCode) + ": " + client.getString());
+    if (httpCode < 0) {
+      write_error(client.errorToString(httpCode));
+    } else {
+      write_error("Status code " + String(httpCode) + ": " +
+                  client.getString());
+    }
     return UNEXPECTED_STATUS_CODE;
   }
 }
@@ -90,23 +99,25 @@ net_state_t request_device_token(Preferences preferences) {
   client.addWakeupCountHeader(wakeup_count);
   client.addAuthorizationHeader(device_token);
 
-  int httpCode = client.GET(String(server_url) + "/token");
+  auto url = String(server_url);
+  url.replace("/image", "/token");
+  int httpCode = client.GET(url);
 
   if (httpCode == 200) {
     JsonDocument doc;
-    write_text("Recieved successful response from server");
-    client.getJson(doc);
+    write_text("Received successful response from server");
+    deserializeJson(doc, client.getString());
 
     cursor_y += 20;
-    write_text("Device: " + String((const char*)doc["deviceId"]));
-    write_text("Challenge: " + String((const char*)doc["challenge"]));
+    write_text("Device: " + String((const char *)doc["deviceId"]));
+    write_text("Challenge: " + String((const char *)doc["challenge"]));
     cursor_y += 20;
 
     write_text("Please approve this token on the server.");
 
-    device_token = String((const char*)doc["token"]);
+    device_token = String((const char *)doc["token"]);
     preferences.putString("token", device_token);
-    return SUCCSESS;
+    return SUCCESS;
   } else {
     write_error("Status code " + String(httpCode) + ": " + client.getString());
     return UNEXPECTED_STATUS_CODE;
@@ -125,7 +136,7 @@ uint32_t get_sleep_time_for_error() {
       break;
 
     case 2:
-      sleep_time_in_s = 30; // 1 * 60 * 60;
+      sleep_time_in_s = 30;  // 1 * 60 * 60;
       break;
 
     default:
@@ -181,16 +192,14 @@ void setup() {
       write_text("Device will go to sleep, restart manually");
       sleep_time_in_s = 30 * 60;
     } else {
-      if (request_device_image(&image_id, &sleep_time_in_s) == SUCCSESS) {
+      if (request_device_image(&image_id, &sleep_time_in_s) == SUCCESS) {
         error_count = 0;
-      } else {
-        // If the last three occurences of status codes are 401, our token seems to be 
-        // invalidated. Reset the stored token. 
-        if (status_codes.last_n_have_status(3, 401)) {
-          request_device_token(preferences);
-          write_text("Device will go to sleep, restart manually");
-          sleep_time_in_s = 30 * 60;
-        }
+      } else if (status_codes.last_n_have_status(3, 401)) {
+        // If the last three occurrences of status codes are 401, our token
+        // seems to be invalidated. Reset the stored token.
+        request_device_token(preferences);
+        write_text("Device will go to sleep, restart manually");
+        sleep_time_in_s = 30 * 60;
       }
     }
 
@@ -199,7 +208,7 @@ void setup() {
     write_error("Could not connect to wifi network, check credentials!");
   }
 
-  // If an error occurs we cannot recieve the sleep time from the server and
+  // If an error occurs we cannot receive the sleep time from the server and
   // must set it to sensible defaults.
   if (sleep_time_in_s <= 0) {
     image_id = 0;

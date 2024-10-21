@@ -31,6 +31,7 @@ class NetworkClient {
     // stop possible previous connections
     client.stop();
     client.setCACertBundle(rootca_crt_bundle_start);
+    client.setTimeout(10000);
 
     addWifiSignalHeader();
     addDeviceIdHeader();
@@ -42,8 +43,6 @@ class NetworkClient {
   String getString() { return http.getString(); }
 
   WiFiClient *getStreamPtr() { return http.getStreamPtr(); }
-
-  void getJson(JsonDocument json) { deserializeJson(json, getString()); }
 
   int getSize() { return http.getSize(); }
 
@@ -69,6 +68,18 @@ class NetworkClient {
 
   void addImageIdHeader(uint8_t image_id) {
     http.addHeader("Image-Id", String(image_id));
+  }
+
+  void addAcceptVersionHeader(String versions) {
+    http.addHeader("Accept-Version", versions);
+  }
+
+  String errorToString(int statusCode) {
+    if (statusCode < 0) {
+      return http.errorToString(statusCode);
+    } else {
+      return "unexpected status code: " + String(statusCode);
+    }
   }
 
   static String getDeviceIdFromMac() {
