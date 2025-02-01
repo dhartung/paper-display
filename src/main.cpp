@@ -126,7 +126,7 @@ uint32_t get_sleep_time_for_error() {
       break;
 
     case 2:
-      sleep_time_in_s = 30;  // 1 * 60 * 60;
+      sleep_time_in_s = 1 * 60 * 60;
       break;
 
     default:
@@ -207,7 +207,7 @@ void setup() {
 
   NetworkClient::stopWifi();
   Serial.end();
-  esp_sleep_enable_timer_wakeup(sleep_time_in_s * 1000 * 1000);
+  esp_sleep_enable_timer_wakeup(1000000ULL * sleep_time_in_s);
   epd_poweroff_all();
   esp_deep_sleep_start();
 }
